@@ -33,23 +33,23 @@ class BatchNorm1d:
         Check the values you need to recompute when eval = False.
         """
         self.Z = Z
-        self.N = None  # TODO: Calculate batch size
-        self.M = None  # TODO: Calculate mini-batch mean
-        self.V = None  # TODO: Calculate mini-batch variance
-
+        self.N = np.shape(Z)[0]  # TODO: Calculate batch size
+        self.M = np.mean(self.Z, axis=0, keepdims=True)  # TODO: Calculate mini-batch mean (N,num_features)
+        self.V = np.var(self.Z, axis=0, keepdims=True)  # TODO: Calculate mini-batch variance (N,num_features)
+        # print("Z", self.Z, "\n M", self.M, "\n V", self.V)
         if eval == False:
             # training mode
-            self.NZ = None  # TODO: Calculate the normalized input Ẑ
-            self.BZ = None  # TODO: Calculate the scaled and shifted for the normalized input Ẑ
+            self.NZ = (self.Z - self.M)/ np.sqrt(self.V + self.eps)  # TODO: Calculate the normalized input Ẑ
+            self.BZ = self.BW * self.NZ + self.Bb  # TODO: Calculate the scaled and shifted for the normalized input Ẑ
 
-            self.running_M = None  # TODO: Calculate running mean
-            self.running_V = None  # TODO: Calculate running variance
+            self.running_M = self.alpha * self.running_M + (1 - self.alpha) * self.M # TODO: Calculate running mean
+            self.running_V = self.alpha * self.running_V + (1 - self.alpha) * self.V  # TODO: Calculate running variance
         else:
             # inference mode
-            self.NZ = None  # TODO: Calculate the normalized input Ẑ using the running average for mean and variance
-            self.BZ = None  # TODO: Calculate the scaled and shifted for the normalized input Ẑ
+            self.NZ = (self.Z - self.running_M)/np.sqrt(self.running_V + self.eps)  # TODO: Calculate the normalized input Ẑ using the running average for mean and variance
+            self.BZ = self.BW * self.NZ + self.Bb  # TODO: Calculate the scaled and shifted for the normalized input Ẑ
 
-        return self.BZ
+        return self.BZ #NZ
 
     def backward(self, dLdBZ):
         """
@@ -59,14 +59,18 @@ class BatchNorm1d:
 
         Read the writeup (Hint: Batch Normalization Section) for implementation details for the BatchNorm1d backward.
         """
-        self.dLdBb = None  # TODO: Sum over the batch dimension.
-        self.dLdBW = None  # TODO: Scale gradient of loss wrt BatchNorm transformation by normalized input NZ.
+        self.dLdBb = np.sum(dLdBZ, axis=0, keepdims=True)  # TODO: Sum over the batch dimension. # , axis=0, keepdims=True
+        self.dLdBW = np.sum(dLdBZ * self.NZ, axis=0, keepdims=True)  # TODO: Scale gradient of loss wrt BatchNorm transformation by normalized input NZ.
 
-        dLdNZ = None  # TODO: Scale gradient of loss wrt BatchNorm transformation output by gamma (scaling parameter).
+        dLdNZ = dLdBZ * self.BW  # TODO: Scale gradient of loss wrt BatchNorm transformation output by gamma (scaling parameter).
 
-        dLdV = None  # TODO: Compute gradient of loss backprop through variance calculation.
-        dNZdM = None  # TODO: Compute derivative of normalized input with respect to mean.
-        dLdM = None  # TODO: Compute gradient of loss with respect to mean.
+        sig_eps = np.power((self.V + self.eps),-1.5)
+        dLdV = -0.5 * np.sum(dLdNZ * (self.Z - self.M) * sig_eps, axis=0, keepdims=True)  # TODO: Compute gradient of loss backprop through variance calculation.
+        dNZdM = -np.power((self.V + self.eps),-0.5) - 0.5*(self.Z - self.M) * np.power((self.V + self.eps),-1.5) * (-2 / self.N * np.sum(self.Z - self.M)) # TODO: Compute derivative of normalized input with respect to mean.
+        dLdM = np.sum(dLdNZ * dNZdM, axis=0, keepdims=True)  # TODO: Compute gradient of loss with respect to mean.
 
-        dLdZ = None  # TODO: Compute gradient of loss with respect to the input.
-        raise NotImplemented  # TODO - What should be the return value?
+        dLdZ = dLdNZ * np.power((self.V + self.eps),-0.5) + dLdV * (2/self.N*(self.Z - self.M)) + dLdM / self.N # TODO: Compute gradient of loss with respect to the input.
+        # print("dLdBZ", dLdBZ, "\n self.dLdBb", self.dLdBb,"\n self.NZ", self.NZ,"\n self.dLdBW", self.dLdBW, "\n"+"-"*30)
+        # print("\n dLdV", dLdV,"\n dNZdM", dNZdM,"\n dLdNZ", dLdNZ, "\n dLdM",dLdM, "\n -", "-"*30)
+        
+        return dLdZ  # TODO - What should be the return value?
